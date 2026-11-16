@@ -1,0 +1,70 @@
+# Codemagic 构建配置 —— 编译 RunSpoof.dylib
+# 放入仓库根目录，文件名必须是 codemagic.yaml
+
+workflows:
+  ios-dylib:
+    name: Build RunSpoof dylib
+    instance_type: mac_mini_m2
+    max_build_duration: 25
+    environment:
+      xcode: latest
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+        - pattern: master
+          include: true
+    scripts:
+      - name: Show toolchain
+        script: |
+          xcodebuild -version
+          xcrun -sdk iphoneos --show-sdk-version
+          echo "PWD=$(pwd)"
+          ls -la
+
+      - name: Verify route data
+        script: |
+          if [ -f route_data.h ]; then
+            echo "route_data.h 大小: $(wc -c < route_data.h) 字节"
+            head -c 200 route_data.h
+            echo ""
+          else
+            echo "ERROR: route_data.h 不存在"
+            exit 1
+          fi
+
+      - name: Build dylib arm64
+        script: |
+          xcrun -sdk iphoneos clang \
+            -arch arm64 \
+            -miphoneos-version-min=15.0 \
+            -dynamiclib \
+            -fobjc-arc \
+            -O2 \
+            -fvisibility=hidden \
+            -framework Foundation \
+            -framework CoreLocation \
+            -framework CoreMotion \
+            -framework UIKit \
+            -o RunSpoof.dylib \
+            RunSpoof.m
+          echo "--- 产物 ---"
+          ls -lh RunSpoof.dylib
+          file RunSpoof.dylib
+
+      - name: Pseudo-sign
+        script: |
+          if command -v ldid >/dev/null 2>&1; then
+            ldid -S RunSpoof.dylib && echo "ldid 签名完成"
+          else
+            echo "ldid 未安装，跳过（TrollFools 不强制要求）"
+          fi
+
+    artifacts:
+      - RunSpoof.dylib
+
+    publishing:
+      email:
+        disable: true
