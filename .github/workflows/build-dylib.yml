@@ -1,0 +1,52 @@
+name: Build RunSpoof dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun -sdk iphoneos --show-sdk-version
+
+      - name: Build dylib (arm64)
+        run: |
+          xcrun -sdk iphoneos clang \
+            -arch arm64 \
+            -miphoneos-version-min=15.0 \
+            -dynamiclib \
+            -fobjc-arc \
+            -O2 \
+            -fvisibility=hidden \
+            -framework Foundation \
+            -framework CoreLocation \
+            -framework CoreMotion \
+            -framework UIKit \
+            -o RunSpoof.dylib \
+            RunSpoof.m
+          ls -lh RunSpoof.dylib
+          file RunSpoof.dylib
+
+      - name: Pseudo-sign
+        run: |
+          brew install ldid 2>/dev/null || true
+          if command -v ldid >/dev/null 2>&1; then
+            ldid -S RunSpoof.dylib
+            echo "ldid 签名完成"
+          else
+            echo "跳过签名（TrollFools 不强制要求）"
+          fi
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: RunSpoof-dylib
+          path: RunSpoof.dylib
+          if-no-files-found: error
